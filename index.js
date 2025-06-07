@@ -1,16 +1,27 @@
 const express = require('express');
 const { FundTask, KPLEstablishConnection, KPLFundTask, getTaskStateInfo, KPLCheckProgram } = require('@_koii/create-task-cli');
 const { establishConnection, checkProgram } = require('@_koii/create-task-cli');
-const {PublicKey, Connection,Keypair} = require('@_koii/web3.js');
+const {PublicKey, Connection, Keypair} = require('@_koii/web3.js');
 const crypto = require('crypto');
 const { parse } = require('path');
 const axios = require('axios');
+
+// Import hero routes
+const heroRoutes = require('./src/routes/heroes');
+
 const app = express();
 const port = 3000;
+
 const SIGNING_SECRET = process.env.SIGNING_SECRET
 const funder_keypair = process.env.funder_keypair
 const user_id_list = ['U06NM9A2VC1', 'U02QTSK9R3N', 'U02QNL3PPFF']
+
 app.use(express.raw({ type: 'application/x-www-form-urlencoded' }));
+app.use(express.json()); // Add JSON parsing middleware
+
+// Integrate hero routes
+app.use('/heroes', heroRoutes);
+
 function verifySlackRequest(req) {
     const slackSignature = req.headers['x-slack-signature'];
     const timestamp = req.headers['x-slack-request-timestamp'];
@@ -21,7 +32,7 @@ function verifySlackRequest(req) {
         return false; // Request is too old
     }
     
-    const sigBasestring = `v0:${timestamp}:${req.body.toString()}`;
+    const sigBasestring = `v0:${timestamp}:${req.body.toString()}`
     const hmac = crypto.createHmac('sha256', SIGNING_SECRET);
     const mySignature = 'v0=' + hmac.update(sigBasestring).digest('hex');
 
@@ -31,7 +42,6 @@ function verifySlackRequest(req) {
 
 // Route to handle funding task
 app.post('/fundtask', async (req, res) => {
-
     if (!verifySlackRequest(req)) {
         return res.status(400).send('Invalid request signature');
     }
@@ -76,14 +86,13 @@ app.listen(port, () => {
     console.log(`App running on port ${port}`);
 });
 
-
 async function generic_fund_task(TASK_ID, AMOUNT){
     const connection = new Connection("https://testnet.koii.network", "confirmed");
 
     const taskStateJSON = await getTaskStateInfo(
         connection,
         TASK_ID,
-      );
+    );
     const stakePotAccount = new PublicKey(taskStateJSON.stake_pot_account, connection);
     if (taskStateJSON.token_type) {
         const mint_uint8 = Uint8Array.from(taskStateJSON.token_type);
@@ -93,12 +102,11 @@ async function generic_fund_task(TASK_ID, AMOUNT){
         await fund_a_KPL_task(TASK_ID, AMOUNT, stakePotAccount, connection, mint_publicKey)
         
     }else{
-
         await fund_a_task(TASK_ID, AMOUNT, stakePotAccount, connection)
-   
     }
 }
-async function fund_a_task(TASK_ID, AMOUNT, stakePotAccount,connection){
+
+async function fund_a_task(TASK_ID, AMOUNT, stakePotAccount, connection){
     console.log("Start Funding:");
     console.log("Funding task with Id: ", TASK_ID);
     console.log("Funding amount: ", AMOUNT);
@@ -115,10 +123,10 @@ async function fund_a_task(TASK_ID, AMOUNT, stakePotAccount,connection){
     // Create-task-cli package setup
     await establishConnection(connection);
     await checkProgram();
-    await FundTask(payerKeypair,taskStateInfoAddress,stakePotAccount, amount);
+    await FundTask(payerKeypair, taskStateInfoAddress, stakePotAccount, amount);
 }
 
-async function fund_a_KPL_task(TASK_ID, AMOUNT, stakePotAccount,connection, mint_publicKey){
+async function fund_a_KPL_task(TASK_ID, AMOUNT, stakePotAccount, connection, mint_publicKey){
     console.log("Start Funding:");
     console.log("Funding task with Id: ", TASK_ID);
     console.log("Funding amount: ", AMOUNT);
@@ -133,5 +141,7 @@ async function fund_a_KPL_task(TASK_ID, AMOUNT, stakePotAccount,connection, mint
     // Create-task-cli package setup
     await KPLEstablishConnection(connection);
     await KPLCheckProgram(); 
-    await KPLFundTask(payerKeypair,taskStateInfoAddress, stakePotAccount, amount, mint_publicKey);
+    await KPLFundTask(payerKeypair, taskStateInfoAddress, stakePotAccount, amount, mint_publicKey);
 }
+
+module.exports = app; // Export for testing
